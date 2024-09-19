@@ -65,33 +65,34 @@ class MarkdownAgent:
         resp = self.query(input_content)
         output = resp["content"]
 
+        # 输出调试信息
+        print(f"模型生成的输出: {output}")
+
         lines = output.split("\n")
         sections = {}
         current_section = ""
+
         for line in lines:
-            if line.startswith("# ") or line.startswith(" # "):
-                # new key
-                current_section = line[2:].strip()
+        # 只要以 # 开头就认为是新部分
+            if line.startswith("#"):
+            # 去掉 # 后面的部分，空格与否都去除
+                current_section = line[1:].strip()
                 sections[current_section] = []
             else:
                 # add content to current key
                 if current_section:
                     sections[current_section].append(line.strip())
+        
         for key in sections.keys():
             sections[key] = "\n".join(sections[key]).strip()
 
         for k in output_keys:
             if (k not in sections) or (len(sections[k]) == 0):
+                print(f"错误：未能解析 {k} 在输出:\n{output}\n\n")
                 raise ValueError(f"fail to parse {k} in output:\n{output}\n\n")
 
-        # if self.is_speak:
-        #     self.speak(
-        #         Msg(
-        #             self.name,
-        #             f"total_tokens: {resp['total_tokens']}\n{resp['content']}\n",
-        #         )
-        #     )
         return sections
+
 
     def invoke(self, inputs: dict, output_keys: list) -> dict:
         input_content = ""
@@ -107,136 +108,131 @@ class MarkdownAgent:
         if self.use_memory:
             self.history = self.history[:2]
 
-class MemorySystem:
-    def __init__(self):
-        # 存储人物的状态和关系
-        self.character_memory = {}
-        self.relationships = {}
+# class MemorySystem:
+#     def __init__(self):
+#         # 存储人物的状态和关系
+#         self.character_memory = {}
+#         self.relationships = {}
 
-    def update_character(self, character_name, status):
-        """更新人物的状态"""
-        self.character_memory[character_name] = status
+#     def update_character(self, character_name, status):
+#         """更新人物的状态"""
+#         self.character_memory[character_name] = status
 
-    def update_relationship(self, character1, character2, relationship):
-        """更新人物之间的关系"""
-        self.relationships[(character1, character2)] = relationship
+#     def update_relationship(self, character1, character2, relationship):
+#         """更新人物之间的关系"""
+#         self.relationships[(character1, character2)] = relationship
 
-    def get_character_status(self, character_name):
-        """获取人物的当前状态"""
-        return self.character_memory.get(character_name, "未知状态")
+#     def get_character_status(self, character_name):
+#         """获取人物的当前状态"""
+#         return self.character_memory.get(character_name, "未知状态")
 
-    def get_relationship(self, character1, character2):
-        """获取人物之间的关系"""
-        return self.relationships.get((character1, character2), "未知关系")
+#     def get_relationship(self, character1, character2):
+#         """获取人物之间的关系"""
+#         return self.relationships.get((character1, character2), "未知关系")
 
-    def memory_summary(self):
-        """返回当前所有人物和关系的记忆摘要"""
-        summary = "当前人物状态：\n"
-        for character, status in self.character_memory.items():
-            summary += f"{character}: {status}\n"
+#     def memory_summary(self):
+#         """返回当前所有人物和关系的记忆摘要"""
+#         summary = "当前人物状态：\n"
+#         for character, status in self.character_memory.items():
+#             summary += f"{character}: {status}\n"
 
-        summary += "\n人物关系：\n"
-        for (char1, char2), relation in self.relationships.items():
-            summary += f"{char1} 和 {char2} 的关系: {relation}\n"
+#         summary += "\n人物关系：\n"
+#         for (char1, char2), relation in self.relationships.items():
+#             summary += f"{char1} 和 {char2} 的关系: {relation}\n"
 
-        return summary
+#         return summary
 
-    def update_memory_from_text(self, extracted_info):
-        """根据大模型提取的信息更新人物状态和关系"""
-        if "characters" in extracted_info:
-            for character, status in extracted_info["characters"].items():
-                self.update_character(character, status)
+#     def update_memory_from_text(self, extracted_info):
+#         """根据大模型提取的信息更新人物状态和关系"""
+#         if "characters" in extracted_info:
+#             for character, status in extracted_info["characters"].items():
+#                 self.update_character(character, status)
 
-        if "relationships" in extracted_info:
-            for (char1, char2), relation in extracted_info["relationships"].items():
-                self.update_relationship(char1, char2, relation)
+#         if "relationships" in extracted_info:
+#             for (char1, char2), relation in extracted_info["relationships"].items():
+#                 self.update_relationship(char1, char2, relation)
 
-    def display_memory_as_table(self):
-        """将记忆以表格形式显示"""
-        # 创建人物状态表
-        character_status_df = pd.DataFrame.from_dict(self.character_memory, orient='index', columns=['状态'])
-        # 创建人物关系表
-        relationships_df = pd.DataFrame(list(self.relationships.items()), columns=['人物', '关系'])
-        return character_status_df, relationships_df
+#     def display_memory_as_table(self):
+#         """将记忆以表格形式显示"""
+#         # 创建人物状态表
+#         character_status_df = pd.DataFrame.from_dict(self.character_memory, orient='index', columns=['状态'])
+#         # 创建人物关系表
+#         relationships_df = pd.DataFrame(list(self.relationships.items()), columns=['人物', '关系'])
+#         return character_status_df, relationships_df
 
 
 class AIGN:
     def __init__(self, chatLLM):
         self.chatLLM = chatLLM
-        self.memory_system = MemorySystem()
+        # self.memory_system = MemorySystem()
         self.paragraph_list = []
         self.novel_content = ""
         self.embellishment_idea = ""
 
         self.novel_writer = MarkdownAgent(
             chatLLM=self.chatLLM,
-            sys_prompt="请根据以下章节大纲和段落大纲扩展成完整的段落。",
+            sys_prompt="请根据以下章节大纲和段落大纲扩展成完整的段落。并在生成的正文前使用'#段落'进行标记",
             name="NovelWriter",
             temperature=0.81,
         )
         self.novel_embellisher = MarkdownAgent(
             chatLLM=self.chatLLM,
-            sys_prompt="请润色以下内容，使其更生动形象。",
+            sys_prompt="请润色以下内容，使其更生动形象，并且在生成正文前使用'#润色'标记。",
             name="NovelEmbellisher",
             temperature=0.92,
         )
-        self.memory_extractor = MarkdownAgent(
-            chatLLM=self.chatLLM,
-            sys_prompt="请从以下文本中提取人物的状态和关系，并以JSON格式返回。例如：{'characters': {'角色A': '状态描述'}, 'relationships': {('角色A', '角色B'): '关系描述'}}。",
-            name="MemoryExtractor",
-            temperature=0.7,
-        )
+        # self.memory_extractor = MarkdownAgent(
+        #     chatLLM=self.chatLLM,
+        #     sys_prompt="请从以下文本中提取人物的状态和关系，并以JSON格式返回。例如：{'characters': {'角色A': '状态描述'}, 'relationships': {('角色A', '角色B'): '关系描述'}}。",
+        #     name="MemoryExtractor",
+        #     temperature=0.7,
+        # )
 
-    def expand_and_embellish_paragraph(self, chapter_outline, paragraph_outline):
-        """根据章节和段落大纲扩展和润色文本"""
-        # 调用小说写作代理生成扩展段落
+    def generate_paragraph(self, chapter_outline, paragraph_outline):
+        """根据章节和段落大纲生成文本段落"""
         resp = self.novel_writer.invoke(
             inputs={
                 "章节大纲": chapter_outline,
                 "段落大纲": paragraph_outline,
-                "前文记忆": self.memory_system.memory_summary()
+                # "前文记忆": self.memory_system.memory_summary()
             },
             output_keys=["段落"]
         )
         next_paragraph = resp["段落"]
+        self.paragraph_list.append(next_paragraph)
+        self.updateNovelContent()
+        return next_paragraph
 
-        # 调用润色代理进行润色
+    def embellish_paragraph(self, paragraph):
+        """润色给定的段落"""
         resp = self.novel_embellisher.invoke(
             inputs={
-                "要润色的内容": next_paragraph,
+                "要润色的内容": paragraph,
                 "润色要求": self.embellishment_idea
             },
-            output_keys=["润色结果"]
+            output_keys=["润色"]
         )
-        embellished_paragraph = resp["润色结果"]
-
-        # 更新小说内容
-        self.paragraph_list.append(embellished_paragraph)
-        self.updateNovelContent()
-
-        # 使用大模型提取人物状态和关系
-        self.extract_memory_with_llm(embellished_paragraph)
-
+        embellished_paragraph = resp["润色"]
         return embellished_paragraph
 
-    def extract_memory_with_llm(self, text):
-        """利用大模型从文本中提取人物状态和关系"""
-        resp = self.memory_extractor.invoke(
-            inputs={
-                "文本": text
-            },
-            output_keys=["人物状态和关系"]
-        )
-        extracted_info = eval(resp["人物状态和关系"])  # 假设大模型返回的结果是字典格式
-        self.memory_system.update_memory_from_text(extracted_info)
+    # def extract_memory_with_llm(self, text):
+    #     """利用大模型从文本中提取人物状态和关系"""
+    #     resp = self.memory_extractor.invoke(
+    #         inputs={
+    #             "文本": text
+    #         },
+    #         output_keys=["人物状态和关系"]
+    #     )
+    #     extracted_info = eval(resp["人物状态和关系"])  # 假设大模型返回的结果是字典格式
+    #     self.memory_system.update_memory_from_text(extracted_info)
 
     def updateNovelContent(self):
         self.novel_content = ""
         for paragraph in self.paragraph_list:
             self.novel_content += f"{paragraph}\n\n"
         return self.novel_content
-
-    def display_memory(self):
-        """显示人物状态和关系表格"""
-        character_status_df, relationships_df = self.memory_system.display_memory_as_table()
-        return character_status_df, relationships_df
+    
+    # def display_memory(self):
+    #     """显示人物状态和关系表格"""
+    #     character_status_df, relationships_df = self.memory_system.display_memory_as_table()
+    #     return character_status_df, relationships_df

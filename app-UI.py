@@ -8,57 +8,42 @@ from LLM import chatLLM
 
 STREAM_INTERVAL = 0.
 
-def display_memory_table(aign):
-    """返回记忆的表格形式，用于展示在界面中"""
-    character_status_df, relationships_df = aign.display_memory()
-    return character_status_df, relationships_df
+def generate_paragraph(aign, chapter_outline, paragraph_outline):
+    """生成新段落并显示"""
+    paragraph = aign.generate_paragraph(chapter_outline, paragraph_outline)
+    return paragraph
 
-def expand_and_update_memory(aign, chapter_outline, paragraph_outline):
-    """扩展段落并更新记忆，返回更新后的内容和记忆表格"""
-    expanded_text = aign.expand_and_embellish_paragraph(chapter_outline, paragraph_outline)
-    character_status_df, relationships_df = aign.display_memory()
-    return expanded_text, character_status_df, relationships_df
+def embellish_paragraph(aign, paragraph):
+    """润色段落并更新记忆"""
+    embellished_text = aign.embellish_paragraph(paragraph)
+    # aign.extract_memory_with_llm(embellished_text)  # 更新记忆
+    # character_status_df, relationships_df = aign.display_memory()
+    # 带人物状态 return embellished_text, character_status_df, relationships_df
+    return embellished_text
 
+# 创建 Gradio 界面
 with gr.Blocks() as demo:
-    aign = gr.State(AIGN(chatLLM))
-    gr.Markdown("## AI 写小说 Demo")
+    aign_state = gr.State(AIGN(chatLLM))
+    gr.Markdown("## AI 小说写作助手")
 
     with gr.Row():
         with gr.Column():
-            chapter_outline_text = gr.Textbox(
-                label="章节大纲",
-                lines=4,
-                interactive=True,
-            )
-            paragraph_outline_text = gr.Textbox(
-                label="段落大纲",
-                lines=4,
-                interactive=True,
-            )
-            expand_button = gr.Button("扩展段落并润色")
-            output_textbox = gr.Textbox(
-                label="扩展内容",
-                lines=10,
-                interactive=False,
-            )
+            chapter_outline_text = gr.Textbox(label="章节大纲", lines=4, interactive=True)
+            paragraph_outline_text = gr.Textbox(label="段落大纲", lines=4, interactive=True)
+            paragraph_output = gr.Textbox(label="生成的段落", lines=10, interactive=False)
+            embellish_output = gr.Textbox(label="润色后的段落", lines=10, interactive=False)
+            generate_button = gr.Button("生成段落")
+            embellish_button = gr.Button("润色段落")
 
-        with gr.Column():
-            character_status_table = gr.Dataframe(
-                headers=["人物", "状态"],
-                datatype=["str", "str"],
-                label="人物状态",
-            )
-            relationships_table = gr.Dataframe(
-                headers=["人物", "关系"],
-                datatype=["str", "str"],
-                label="人物关系",
-            )
+        # with gr.Column():
+        #     character_status_table = gr.Dataframe(headers=["人物", "状态"], datatype=["str", "str"], label="人物状态")
+        #     relationships_table = gr.Dataframe(headers=["人物", "关系"], datatype=["str", "str"], label="人物关系")
 
-    # 绑定按钮事件
-    expand_button.click(
-        fn=expand_and_update_memory,
-        inputs=[aign, chapter_outline_text, paragraph_outline_text],
-        outputs=[output_textbox, character_status_table, relationships_table]
-    )
+    # 绑定生成段落事件
+    generate_button.click(fn=generate_paragraph, inputs=[aign_state, chapter_outline_text, paragraph_outline_text], outputs=[paragraph_output])
+
+    # 绑定润色段落事件
+    # 加上人物关系：embellish_button.click(fn=embellish_paragraph, inputs=[aign_state, paragraph_output], outputs=[embellish_output, character_status_table, relationships_table])
+    embellish_button.click(fn=embellish_paragraph, inputs=[aign_state, paragraph_output], outputs=[embellish_output])
 
 demo.launch()
