@@ -1,5 +1,6 @@
 import pandas as pd
 import time
+import json
 
 from AIGN_Prompt import *
 
@@ -27,7 +28,6 @@ class MarkdownAgent:
         top_p=0.8,
         use_memory=False,
         first_replay="明白了。",
-        # first_replay=None,
         is_speak=True,
     ) -> None:
 
@@ -45,8 +45,6 @@ class MarkdownAgent:
         else:
             resp = chatLLM(messages=self.history)
             self.history.append({"role": "assistant", "content": resp["content"]})
-            # if self.is_speak:
-            #     self.speak(Msg(self.name, resp["content"]))
 
     def query(self, user_input: str) -> str:
         resp = self.chatLLM(
@@ -61,7 +59,7 @@ class MarkdownAgent:
         return resp
 
     def getOutput(self, input_content: str, output_keys: list) -> dict:
-        """解析类md格式中 # key 的内容，未解析全部output_keys中的key会报错"""
+        """解析类md格式中 # key 的内容"""
         resp = self.query(input_content)
         output = resp["content"]
 
@@ -73,26 +71,23 @@ class MarkdownAgent:
         current_section = ""
 
         for line in lines:
-        # 只要以 # 开头就认为是新部分
+            # 以 # 开头认为是新部分
             if line.startswith("#"):
-            # 去掉 # 后面的部分，空格与否都去除
                 current_section = line[1:].strip()
                 sections[current_section] = []
             else:
-                # add content to current key
                 if current_section:
                     sections[current_section].append(line.strip())
-        
+
         for key in sections.keys():
             sections[key] = "\n".join(sections[key]).strip()
 
         for k in output_keys:
-            if (k not in sections) or (len(sections[k]) == 0):
+            if k not in sections or not sections[k]:
                 print(f"错误：未能解析 {k} 在输出:\n{output}\n\n")
                 raise ValueError(f"fail to parse {k} in output:\n{output}\n\n")
 
         return sections
-
 
     def invoke(self, inputs: dict, output_keys: list) -> dict:
         input_content = ""
@@ -108,70 +103,14 @@ class MarkdownAgent:
         if self.use_memory:
             self.history = self.history[:2]
 
-# class MemorySystem:
-#     def __init__(self):
-#         # 存储人物的状态和关系
-#         self.character_memory = {}
-#         self.relationships = {}
-
-#     def update_character(self, character_name, status):
-#         """更新人物的状态"""
-#         self.character_memory[character_name] = status
-
-#     def update_relationship(self, character1, character2, relationship):
-#         """更新人物之间的关系"""
-#         self.relationships[(character1, character2)] = relationship
-
-#     def get_character_status(self, character_name):
-#         """获取人物的当前状态"""
-#         return self.character_memory.get(character_name, "未知状态")
-
-#     def get_relationship(self, character1, character2):
-#         """获取人物之间的关系"""
-#         return self.relationships.get((character1, character2), "未知关系")
-
-#     def memory_summary(self):
-#         """返回当前所有人物和关系的记忆摘要"""
-#         summary = "当前人物状态：\n"
-#         for character, status in self.character_memory.items():
-#             summary += f"{character}: {status}\n"
-
-#         summary += "\n人物关系：\n"
-#         for (char1, char2), relation in self.relationships.items():
-#             summary += f"{char1} 和 {char2} 的关系: {relation}\n"
-
-#         return summary
-
-#     def update_memory_from_text(self, extracted_info):
-#         """根据大模型提取的信息更新人物状态和关系"""
-#         if "characters" in extracted_info:
-#             for character, status in extracted_info["characters"].items():
-#                 self.update_character(character, status)
-
-#         if "relationships" in extracted_info:
-#             for (char1, char2), relation in extracted_info["relationships"].items():
-#                 self.update_relationship(char1, char2, relation)
-
-#     def display_memory_as_table(self):
-#         """将记忆以表格形式显示"""
-#         # 创建人物状态表
-#         character_status_df = pd.DataFrame.from_dict(self.character_memory, orient='index', columns=['状态'])
-#         # 创建人物关系表
-#         relationships_df = pd.DataFrame(list(self.relationships.items()), columns=['人物', '关系'])
-#         return character_status_df, relationships_df
-
-
 class AIGN:
     def __init__(self, chatLLM):
         self.chatLLM = chatLLM
-        # self.memory_system = MemorySystem()
-        self.paragraph_list = []
-        self.novel_content = ""
-        self.embellishment_idea = ""
-
+        self.plot_summaries = []  # 用于存储多轮次的剧情总结
+        self.global_plot_setting = "这是一个关于..."  # 全局剧情设定
         self.novel_writer = MarkdownAgent(
             chatLLM=self.chatLLM,
-            sys_prompt="请根据以下章节大纲和段落大纲扩展成完整的段落。并在生成的正文前使用'#段落'进行标记",
+            sys_prompt="请根据以下章节大纲和段落大纲扩展成完整的段落。并在生成的正文前使用'#段落'进行标记。",
             name="NovelWriter",
             temperature=0.81,
         )
@@ -181,58 +120,59 @@ class AIGN:
             name="NovelEmbellisher",
             temperature=0.92,
         )
-        # self.memory_extractor = MarkdownAgent(
-        #     chatLLM=self.chatLLM,
-        #     sys_prompt="请从以下文本中提取人物的状态和关系，并以JSON格式返回。例如：{'characters': {'角色A': '状态描述'}, 'relationships': {('角色A', '角色B'): '关系描述'}}。",
-        #     name="MemoryExtractor",
-        #     temperature=0.7,
-        # )
+        self.memory_extractor = MarkdownAgent(
+            chatLLM=self.chatLLM,
+            sys_prompt="请从以下文本中提取剧情走向（简洁总结）并以'#剧情'为标题进行标记。",
+            name="MemoryExtractor",
+            temperature=0.7,
+        )
+
+    def extract_memory(self, text):
+        """利用大模型从文本中提取剧情总结"""
+        resp = self.memory_extractor.invoke(
+            inputs={"文本": text},
+            output_keys=["剧情"]
+        )
+        plot_summary = resp["剧情"]
+        return plot_summary
+
+    def updateMemory(self, text):
+        """利用模型总结内容并更新剧情"""
+        new_summary = self.extract_memory(text)
+        self.plot_summaries.append(new_summary)  # 将新的剧情加入到多轮次剧情中
 
     def generate_paragraph(self, chapter_outline, paragraph_outline):
-        """根据章节和段落大纲生成文本段落"""
+        """生成段落并更新剧情"""
+        current_memory_summary = self.get_memory_summary()
         resp = self.novel_writer.invoke(
             inputs={
                 "章节大纲": chapter_outline,
                 "段落大纲": paragraph_outline,
-                # "前文记忆": self.memory_system.memory_summary()
+                "前文剧情": current_memory_summary
             },
             output_keys=["段落"]
         )
         next_paragraph = resp["段落"]
-        self.paragraph_list.append(next_paragraph)
-        self.updateNovelContent()
+        self.updateMemory(next_paragraph)  # 更新剧情
         return next_paragraph
-
-    def embellish_paragraph(self, paragraph):
-        """润色给定的段落"""
+    
+    def embellish_paragraph(self, paragraph, embellishment_idea):
+        """润色给定的段落并更新剧情"""
+        current_memory_summary = self.get_memory_summary()
         resp = self.novel_embellisher.invoke(
             inputs={
                 "要润色的内容": paragraph,
-                "润色要求": self.embellishment_idea
+                "润色要求": embellishment_idea,
+                "前文剧情": current_memory_summary
             },
             output_keys=["润色"]
         )
         embellished_paragraph = resp["润色"]
+        self.updateMemory(embellished_paragraph)  # 更新剧情
         return embellished_paragraph
 
-    # def extract_memory_with_llm(self, text):
-    #     """利用大模型从文本中提取人物状态和关系"""
-    #     resp = self.memory_extractor.invoke(
-    #         inputs={
-    #             "文本": text
-    #         },
-    #         output_keys=["人物状态和关系"]
-    #     )
-    #     extracted_info = eval(resp["人物状态和关系"])  # 假设大模型返回的结果是字典格式
-    #     self.memory_system.update_memory_from_text(extracted_info)
-
-    def updateNovelContent(self):
-        self.novel_content = ""
-        for paragraph in self.paragraph_list:
-            self.novel_content += f"{paragraph}\n\n"
-        return self.novel_content
-    
-    # def display_memory(self):
-    #     """显示人物状态和关系表格"""
-    #     character_status_df, relationships_df = self.memory_system.display_memory_as_table()
-    #     return character_status_df, relationships_df
+    def get_memory_summary(self):
+        """获取当前的剧情记忆摘要，包括全局设定和多轮次的剧情总结"""
+        summary = self.global_plot_setting + "\n"
+        summary += "\n".join(self.plot_summaries[-3:])  # 获取最近的3次剧情总结
+        return summary
