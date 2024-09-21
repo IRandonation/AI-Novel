@@ -126,6 +126,21 @@ class AIGN:
             name="MemoryExtractor",
             temperature=0.7,
         )
+        self.outline_expander = MarkdownAgent(
+            chatLLM=self.chatLLM,
+            sys_prompt="请根据以下简短的章节或情节大纲，生成一个这一段情节或者章节的扩展大纲作为这一段情节的参考，并在生成的内容前只使用'#扩展'进行标记。",
+            name="OutlineExpander",
+            temperature=0.85,
+        )
+
+    def expand_outline(self, outline):
+        """扩展章节或情节大纲"""
+        resp = self.outline_expander.invoke(
+            inputs={"简短大纲": outline},
+            output_keys=["扩展"]
+        )
+        expanded_outline = resp["扩展"]
+        return expanded_outline
 
     def extract_memory(self, text):
         """利用大模型从文本中提取剧情总结"""
