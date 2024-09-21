@@ -108,27 +108,28 @@ class AIGN:
         self.chatLLM = chatLLM
         self.plot_summaries = []  # 用于存储多轮次的剧情总结
         self.global_plot_setting = "这是一个关于..."  # 全局剧情设定
+        
         self.novel_writer = MarkdownAgent(
             chatLLM=self.chatLLM,
-            sys_prompt="请根据以下章节大纲和段落大纲扩展成完整的段落。并在生成的正文前使用'#段落'进行标记。",
+            sys_prompt="请根据以下章节大纲和段落大纲扩展成完整的段落。并在生成的正文前使用'#段落'进行标记，其他的什么都不要加。",
             name="NovelWriter",
             temperature=0.81,
         )
         self.novel_embellisher = MarkdownAgent(
             chatLLM=self.chatLLM,
-            sys_prompt="请润色以下内容，使其更生动形象，并且在生成正文前使用'#润色'标记。",
+            sys_prompt="请润色以下内容，使其更生动形象，并在生成正文前使用'#润色'标记，其他的什么都不要加。",
             name="NovelEmbellisher",
             temperature=0.92,
         )
         self.memory_extractor = MarkdownAgent(
             chatLLM=self.chatLLM,
-            sys_prompt="请从以下文本中提取剧情走向（简洁总结）并以'#剧情'为标题进行标记。",
+            sys_prompt="请从以下文本中提取剧情走向（简洁总结）并以'#剧情'为标题进行标记，其他的什么都不要加。",
             name="MemoryExtractor",
             temperature=0.7,
         )
         self.outline_expander = MarkdownAgent(
             chatLLM=self.chatLLM,
-            sys_prompt="请根据以下简短的章节或情节大纲，生成一个这一段情节或者章节的扩展大纲作为这一段情节的参考，并在生成的内容前只使用'#扩展'进行标记。",
+            sys_prompt="请根据以下简短的章节或情节大纲，生成一个这一段情节或者章节的扩展大纲作为这一段情节的参考，并在生成的内容前只使用'#扩展'进行标记，其他的什么都不要加。",
             name="OutlineExpander",
             temperature=0.85,
         )
@@ -191,3 +192,16 @@ class AIGN:
         summary = self.global_plot_setting + "\n"
         summary += "\n".join(self.plot_summaries[-3:])  # 获取最近的3次剧情总结
         return summary
+
+    def get_memory_data(self):
+        """获取当前的记忆数据，返回字典格式"""
+        memory_data = {
+            'global_plot_setting': self.global_plot_setting,
+            'plot_summaries': self.plot_summaries
+        }
+        return memory_data
+
+    def load_memory_data(self, memory_data):
+        """从字典数据中加载记忆"""
+        self.global_plot_setting = memory_data.get('global_plot_setting', "这是一个关于...")
+        self.plot_summaries = memory_data.get('plot_summaries', [])
